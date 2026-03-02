@@ -1,0 +1,15 @@
+[project]
+name = "icp-python"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "marimo>=0.19.10",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.1",
+    "pypcd4>=1.4.3",
+    "pyzmq>=27.1.0",
+    "scipy>=1.17.0",
+    "seaborn>=0.13.2",
+]

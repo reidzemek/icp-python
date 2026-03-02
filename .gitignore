@@ -1,0 +1,13 @@
+# Ignore the data directory
+ILP_Test_Data*
+
+# But keep the archive
+# !ILP_Test_Data.7z
+
+.vscode
+.venv
+
+__pycache__
+
+.python-version
+uv.lock
