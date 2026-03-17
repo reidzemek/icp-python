@@ -11,3 +11,5 @@ __pycache__
 
 .python-version
 uv.lock
+
+temp.py
