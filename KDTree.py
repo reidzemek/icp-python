@@ -542,7 +542,7 @@ class KDTree:
                 z_bin = to_twos_complement(int(z), n_coord_bits)
 
                 # unary flag
-                unary_flag = "1" if node.type == "unary" else "0"
+                unary_flag = "1" if node.type == 1 else "0"
 
                 # axis encoding
                 if node.type == 0:
