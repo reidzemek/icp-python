@@ -545,7 +545,7 @@ class KDTree:
                 unary_flag = "1" if node.type == "unary" else "0"
 
                 # axis encoding
-                if node.type == "leaf":
+                if node.type == 0:
                     axis_val = 3
                 else:
                     axis_val = node.axis
