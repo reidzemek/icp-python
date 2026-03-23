@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from pypcd4 import PointCloud
-import kdtree
+import kdtree_old
 import icp
 
 def system_dark_mode():
@@ -186,10 +186,10 @@ def transformation_error(src_pcd_path, tgt_pcd_path):
     Q = PointCloud.from_path(tgt_pcd_path).numpy(("x", "y", "z"))
 
     # ---- Build KD-tree on target ----
-    tree = kdtree.build(Q)
+    tree = kdtree_old.build(Q)
 
     # ---- Nearest neighbor search ----
-    Q_nn = kdtree.nn_search(tree, P)
+    Q_nn = kdtree_old.nn_search(tree, P)
 
     # ---- Compute point-to-point error ----
     error = icp.p2p_error(P, Q_nn)
