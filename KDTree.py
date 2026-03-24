@@ -6,6 +6,7 @@ from pathlib import Path
 import csv
 from pypcd4 import PointCloud
 import pandas as pd
+from enum import Enum
 
 class KDTree:
     """k-dimensional (k-d) tree for exact nearest neighbor (nn) search.
@@ -109,53 +110,149 @@ class KDTree:
         self._log_best = []
         self._log_branch = []
 
+    # def nn_search(self, P: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    #     """Find the nearest neighbors for each point in point cloud `P`.
+
+    #     Args:
+    #         P (np.ndarray): Source point cloud of shape (N, 3) containing N points to query.
+
+    #     Returns:
+    #         tuple: `Q_nn` and `Optional[N_nn]` outlined below.
+
+    #         **Q_nn** : *np.ndarray of shape (N, 3)*<br>
+    #         Nearest neighbor points in Q for each point in P.
+
+    #         **N_nn** : *np.ndarray of shape (N, 3) | None*<br>
+    #         Surface normals corresponding to each point in `Q_nn` or None for trees
+    #         without surface normal vectors.
+    #     """
+
+    #     # Initialize arrays to store the nearest point clouds and corresponding normal vectors
+    #     Q_nn = np.empty_like(P)
+    #     N_nn = np.empty_like(P) if self._nodes[0].normal is not None else None
+
+    #     # Reset logging
+    #     self._log_leaf = []
+    #     self._log_best = []
+    #     self._log_branch = []
+
+    #     # For each point in the source point cloud
+    #     for idx, query in enumerate(P):
+
+    #         # Append an empty list to leaf and best log lists
+    #         self._log_leaf.append([])
+    #         self._log_best.append([])
+    #         self._log_branch.append([])
+
+    #         self._down_count = 0
+
+    #         # Append 
+    #         branch_stack = []
+    #         best = [0, float("inf")]
+    #         self._descend(query, branch_stack, best, idx)
+    #         Q_nn[idx] = self._nodes[best[0]].point
+    #         if N_nn is not None:
+    #             N_nn[idx] = self._nodes[best[0]].normal
+
+    #     # Write point cloud of nearest target points to nearest targets log
+    #     self._log_q_nn = Q_nn.tolist()
+
+    #     return Q_nn, N_nn
+
+    class SearchState(Enum):
+        DESCEND = 0
+        BACKTRACK = 1
+
     def nn_search(self, P: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Find the nearest neighbors for each point in point cloud `P`.
+        """Nearest neighbor search using a single explicit state machine."""
 
-        Args:
-            P (np.ndarray): Source point cloud of shape (N, 3) containing N points to query.
-
-        Returns:
-            tuple: `Q_nn` and `Optional[N_nn]` outlined below.
-
-            **Q_nn** : *np.ndarray of shape (N, 3)*<br>
-            Nearest neighbor points in Q for each point in P.
-
-            **N_nn** : *np.ndarray of shape (N, 3) | None*<br>
-            Surface normals corresponding to each point in `Q_nn` or None for trees
-            without surface normal vectors.
-        """
-
-        # Initialize arrays to store the nearest point clouds and corresponding normal vectors
         Q_nn = np.empty_like(P)
         N_nn = np.empty_like(P) if self._nodes[0].normal is not None else None
 
-        # Reset logging
         self._log_leaf = []
         self._log_best = []
         self._log_branch = []
 
-        # For each point in the source point cloud
         for idx, query in enumerate(P):
-
-            # Append an empty list to leaf and best log lists
             self._log_leaf.append([])
             self._log_best.append([])
             self._log_branch.append([])
 
-            self._down_count = 0
-
-            # Append 
-            branch_stack = []
+            branch_stack: List[Tuple[int, float, Optional[int]]] = []
             best = [0, float("inf")]
-            self._descend(query, branch_stack, best, idx)
+            node_idx: Optional[int] = 0
+            down_count = 0
+            state = self.SearchState.DESCEND
+
+            while True:
+                if state == self.SearchState.DESCEND:
+                    # ----------------------
+                    # DESCEND PHASE
+                    # ----------------------
+                    while node_idx is not None:
+                        if down_count >= len(self._log_branch[idx]):
+                            self._log_branch[idx].append([])
+                        self._log_branch[idx][down_count].append(node_idx)
+                        self._visited_count += 1
+
+                        node = self._nodes[node_idx]
+                        node_point = np.array(node.point)
+                        dist_sq = np.sum((query - node_point) ** 2)
+
+                        if dist_sq < best[1]:
+                            best[:] = [node_idx, dist_sq]
+
+                        # Determine near and far children
+                        if node.type == 2:  # binary node
+                            if query[node.axis] < node_point[node.axis]:
+                                near, far = node.addr1, node.addr1 + 1
+                            else:
+                                near, far = node.addr1 + 1, node.addr1
+                        elif node.type == 1:  # unary node
+                            near, far = node.addr1, None
+                        else:  # leaf
+                            near = far = None
+
+                        split_dist_sq = (query[node.axis] - node_point[node.axis]) ** 2
+                        branch_stack.append((node_idx, split_dist_sq, far))
+
+                        temp = node_idx
+                        node_idx = near
+
+                        if node.type == 0:  # leaf
+                            break
+
+                    # Log leaf and best for this downward pass
+                    self._log_leaf[idx].append(temp)
+                    self._log_best[idx].append(best[0])
+                    down_count += 1
+
+                    # Switch to backtrack phase
+                    state = self.SearchState.BACKTRACK
+
+                elif state == self.SearchState.BACKTRACK:
+                    # ----------------------
+                    # BACKTRACK PHASE
+                    # ----------------------
+                    node_idx = None
+                    while branch_stack:
+                        branch_node = branch_stack.pop()
+                        if best[1] < branch_node[1] or branch_node[2] is None:
+                            continue
+                        node_idx = branch_node[2]  # descend down far branch
+                        break
+
+                    if node_idx is None:
+                        break  # done with this query
+                    else:
+                        state = self.SearchState.DESCEND  # resume descent on far branch
+
+            # Save nearest neighbor results
             Q_nn[idx] = self._nodes[best[0]].point
             if N_nn is not None:
                 N_nn[idx] = self._nodes[best[0]].normal
 
-        # Write point cloud of nearest target points to nearest targets log
         self._log_q_nn = Q_nn.tolist()
-
         return Q_nn, N_nn
 
     def _descend(
