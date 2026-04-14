@@ -176,6 +176,7 @@ class KDTree:
         self._log_branch = []
 
         self._log = []
+        self._log_result = []
 
         for idx, query in enumerate(P):
             self._log_leaf.append([])
@@ -273,6 +274,17 @@ class KDTree:
             Q_nn[idx] = self._nodes[best[0]].point
             if N_nn is not None:
                 N_nn[idx] = self._nodes[best[0]].normal
+
+            self._log_result.append([
+                idx,
+                query[0],
+                query[1],
+                query[2],
+                best[0],
+                self._nodes[best[0]].point[0],
+                self._nodes[best[0]].point[1],
+                self._nodes[best[0]].point[2]
+            ])
 
         self._log_q_nn = Q_nn.tolist()
         return Q_nn, N_nn
@@ -582,54 +594,68 @@ class KDTree:
         """
 
         columns = [
-            "query_addr",
-            "query_x", "query_y", "query_z",
-            "trav_id",
-            "node_addr",
-            "node_x", "node_y", "node_z",
+            "query(P)",
+            "px", "py", "pz",
+            "DT_pass",
+            "qnode_addr",
+            "qx", "qy", "qz",
             "node_type",
-            "point_dist",
-            "plane_dist"
+            "pq_dist",
+            "split"
         ]
 
         log_df = pd.DataFrame.from_records(self._log, columns=columns)
 
         log_df = log_df.sort_values(
-            ["query_addr", "trav_id"]
+            ["query(P)", "DT_pass"]
         ).reset_index(drop=True)
 
-        max_pass = log_df["trav_id"].max() + 1
+        max_pass = log_df["DT_pass"].max() + 1
         best_flags = np.zeros((len(log_df), max_pass), dtype=int)
         search_flags = np.zeros((len(log_df), max_pass), dtype=int)
 
-        for q, qdf in log_df.groupby("query_addr"):
+        for q, qdf in log_df.groupby("query(P)"):
 
-            qdf = qdf.sort_values("trav_id")
-            max_t = qdf["trav_id"].max()
+            qdf = qdf.sort_values("DT_pass")
+            max_t = qdf["DT_pass"].max()
 
             for t in range(max_t + 1):
 
                 # all rows up to traversal t
-                sub = qdf[qdf["trav_id"] <= t]
+                sub = qdf[qdf["DT_pass"] <= t]
 
                 if len(sub) == 0:
                     continue
 
-                best_idx = sub["point_dist"].idxmin()
+                best_idx = sub["pq_dist"].idxmin()
                 best_flags[best_idx, t] = 1
 
-                best_so_far = log_df.loc[best_idx, "point_dist"]
+                best_so_far = log_df.loc[best_idx, "pq_dist"]
 
                 search_flags[sub.index, t] = (
-                    best_so_far > sub["plane_dist"].values
+                    best_so_far > sub["split"].values
                 ).astype(int)
-
-        for t in range(max_pass):
-            log_df[f"best ({t})"] = best_flags[:, t]
 
         log_df["search"] = search_flags.any(axis=1).astype(int)
 
-        return log_df
+        best_idx = (
+            log_df.groupby(["query(P)", "DT_pass"])["pq_dist"]
+            .idxmin()
+        )
+
+        log_df["DT_best"] = 0
+        log_df.loc[best_idx, "DT_best"] = 1
+
+        columns = [
+            "query(P)",
+            "px", "py", "pz",
+            "qnode_addr",
+            "qx", "qy", "qz"
+        ]
+
+        log_result_df = pd.DataFrame(self._log_result, columns=columns)
+
+        return log_df, log_result_df
 
 
     def write_tree(self, path: Path):
