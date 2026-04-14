@@ -68,7 +68,7 @@ class KDTree:
             self.addr1 = left_child
             self.addrP = parent
             self.type = node_type
-    
+
     def __init__(self, target: Union[Path, np.ndarray]):
         """Built the k-d tree data structure using BFS ordering."""
 
@@ -105,6 +105,8 @@ class KDTree:
         self._down_count = 0
 
         # Initialize lists for nearest neighbor search logging
+        self._log = []
+
         self._log_q_nn = []
         self._log_leaf = []
         self._log_best = []
@@ -173,6 +175,8 @@ class KDTree:
         self._log_best = []
         self._log_branch = []
 
+        self._log = []
+
         for idx, query in enumerate(P):
             self._log_leaf.append([])
             self._log_best.append([])
@@ -192,7 +196,9 @@ class KDTree:
                     while node_idx is not None:
                         if down_count >= len(self._log_branch[idx]):
                             self._log_branch[idx].append([])
+                        
                         self._log_branch[idx][down_count].append(node_idx)
+
                         self._visited_count += 1
 
                         node = self._nodes[node_idx]
@@ -214,6 +220,22 @@ class KDTree:
                             near = far = None
 
                         split_dist_sq = (query[node.axis] - node_point[node.axis]) ** 2
+
+                        self._log.append([
+                            idx,
+                            query[0],
+                            query[1],
+                            query[2],
+                            down_count,
+                            node_idx,
+                            node_point[0],
+                            node_point[1],
+                            node_point[2],
+                            node.type,
+                            dist_sq,
+                            split_dist_sq
+                        ])
+
                         branch_stack.append((node_idx, split_dist_sq, far))
 
                         temp = node_idx
@@ -551,6 +573,64 @@ class KDTree:
         # best_nodes_path = Path(path, f"best_nodes-{n_P}_{n_Q}_{n_coord_bits}.csv")
         # best_df = pd.DataFrame(self._log_best)
         # best_df.to_csv(best_nodes_path, index=False)
+
+    def write_unified_search_trace(self, path: Path, n_P, n_Q, n_coord_bits):
+        """Write unified trace to csv.
+
+        Args:
+            path (Path): Directory path where to store the logging data.
+        """
+
+        columns = [
+            "query_addr",
+            "query_x", "query_y", "query_z",
+            "trav_id",
+            "node_addr",
+            "node_x", "node_y", "node_z",
+            "node_type",
+            "point_dist",
+            "plane_dist"
+        ]
+
+        log_df = pd.DataFrame.from_records(self._log, columns=columns)
+
+        log_df = log_df.sort_values(
+            ["query_addr", "trav_id"]
+        ).reset_index(drop=True)
+
+        max_pass = log_df["trav_id"].max() + 1
+        best_flags = np.zeros((len(log_df), max_pass), dtype=int)
+        search_flags = np.zeros((len(log_df), max_pass), dtype=int)
+
+        for q, qdf in log_df.groupby("query_addr"):
+
+            qdf = qdf.sort_values("trav_id")
+            max_t = qdf["trav_id"].max()
+
+            for t in range(max_t + 1):
+
+                # all rows up to traversal t
+                sub = qdf[qdf["trav_id"] <= t]
+
+                if len(sub) == 0:
+                    continue
+
+                best_idx = sub["point_dist"].idxmin()
+                best_flags[best_idx, t] = 1
+
+                best_so_far = log_df.loc[best_idx, "point_dist"]
+
+                search_flags[sub.index, t] = (
+                    best_so_far > sub["plane_dist"].values
+                ).astype(int)
+
+        for t in range(max_pass):
+            log_df[f"best ({t})"] = best_flags[:, t]
+
+        log_df["search"] = search_flags.any(axis=1).astype(int)
+
+        return log_df
+
 
     def write_tree(self, path: Path):
         """Write the target point cloud k-d tree to csv.
