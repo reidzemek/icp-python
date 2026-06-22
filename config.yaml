@@ -1,0 +1,40 @@
+quantization:
+  n_coord_bits: 16
+  norm_range: null          # explicit [lo, hi], or null to auto-compute over P ∪ Q
+  norm_margin_frac: 0.05    # fractional padding per side; used only when norm_range is null
+
+memory:
+  n_addrs: 16384    # addr_width is derived as int(log2(n_addrs))
+
+point_counts:
+  n_P: 10
+  n_Q: 100
+
+icp:
+  n_icp_iters: 5
+  n_jacobi_sweeps: 8
+  R_width: 32    # signed fixed-point bit width for the rotation matrix R (Q1.(R_width-1))
+
+run:
+  n_pairs: 5    # null = process all pairs
+
+error:
+  p2pl_noise_coeffs: null    # or null to disable denoising
+
+trace:
+  # ICP iterations whose per-unit memory images are written, under
+  # <pair-trace>/iter_NN/. Fixed-iteration mode only: ignored (with a warning)
+  # when icp.n_icp_iters is null. Indices must be in range [0, n_icp_iters).
+  mem_iters: [0, 3]    # e.g. [0, 9]; empty = write no memory images
+
+  # Pair ids eligible for ICP-output logging. Independent of run.n_pairs (which
+  # still controls how many pairs are processed and define norm_range): this
+  # only narrows which processed pairs are traced. Empty = all processed pairs
+  # eligible. mem_iters is the master switch; tracing happens only when it is
+  # non-empty. Ids are range-checked against run.n_pairs when set, else against
+  # the dataset's total pair count.
+  mem_pairs: [0]    # e.g. [0, 7]; empty = all pairs eligible
+
+paths:
+  validation: ./validation_dataset_2
+  trace: ./icp_trace_2

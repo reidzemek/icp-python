@@ -1,0 +1,10 @@
+# A sweep file references a config via `extends:` (resolved relative to this
+# file) and lists the axes to vary under `sweep:`. It may contain ONLY these
+# two keys. Axes must be in the harness allowlist
+# (quantization.n_coord_bits, icp.n_icp_iters).
+
+extends: config.yaml
+
+sweep:
+  quantization.n_coord_bits: [8, 10, 12, 16]
+  icp.n_icp_iters: [5, 10, 20]

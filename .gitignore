@@ -1,5 +1,8 @@
 # Ignore the data directory
 ILP_Test_Data*
+validation_dataset*
+icp_trace*
+figures
 
 # But keep the archive
 # !ILP_Test_Data.7z
@@ -13,3 +16,7 @@ __pycache__
 uv.lock
 
 temp.py
+
+**OLD**
+
+render_eq.py
